@@ -1,109 +1,46 @@
-import requests
-from bs4 import BeautifulSoup
-import time
 import telebot
-import re
+import requests
+import time
 
-# --- CONFIGURAZIONE ---
 BOT_TOKEN = "8133082828:AAGPCNPRG2feEb-vV36Wq-5W0Up7WN0QZ7Y"
-CHANNEL_ID = "@SmartTipsEasyOffer"
-AFF_TAG = "mario040d-21"
-MIN_DISCOUNT = 20
-SCRAPE_INTERVAL = 1800  # 30 minuti
-
-# Pagine Amazon con offerte reali
-OFFER_PAGES = [
-    "https://www.amazon.it/gp/deals",
-    "https://www.amazon.it/deal-of-the-day",
-    "https://www.amazon.it/outlet",
-]
+CHANNEL = "@SmartTipsEasyOffer"
+PERCENTUALE = 20
 
 bot = telebot.TeleBot(BOT_TOKEN)
 
-# --- FUNZIONE PER ESTRARRE IL PREZZO ---
-def extract_price(text):
-    if not text:
-        return None
-    match = re.findall(r"\d+[,\.]?\d*", text)
-    if match:
-        return float(match[0].replace(",", "."))
-    return None
+# Comando start
+@bot.message_handler(commands=['start'])
+def start(message):
+    bot.reply_to(message,
+        "🔥 Benvenuto nel bot SmartTips Easy Offer!\n"
+        f"Ricevi offerte dal canale: {CHANNEL}\n"
+        f"Percentuale ricavo: {PERCENTUALE}%"
+    )
 
-# --- FUNZIONE PER SCRAPING DELLE OFFERTE ---
-def get_deals():
-    deals = []
-
-    headers = {
-        "User-Agent": "Mozilla/5.0"
-    }
-
-    for url in OFFER_PAGES:
-        try:
-            r = requests.get(url, headers=headers, timeout=10)
-            soup = BeautifulSoup(r.text, "html.parser")
-
-            items = soup.find_all("div", {"class": "dealContainer"})
-
-            for item in items:
-                title = item.get_text().strip()
-                if not title:
-                    continue
-
-                price_new = extract_price(item.find(text=re.compile("€")))
-                price_old = extract_price(item.find(text=re.compile("Prezzo precedente")))
-
-                if not price_new or not price_old:
-                    continue
-
-                discount = round((price_old - price_new) / price_old * 100)
-
-                if discount < MIN_DISCOUNT:
-                    continue
-
-                link_tag = item.find("a", href=True)
-                if not link_tag:
-                    continue
-
-                link = "https://www.amazon.it" + link_tag["href"]
-                link += f"?tag={AFF_TAG}"
-
-                deals.append({
-                    "title": title[:150],
-                    "price_new": price_new,
-                    "price_old": price_old,
-                    "discount": discount,
-                    "url": link
-                })
-
-        except Exception as e:
-            print("Errore scraping:", e)
-
-    return deals
-
-
-# --- INVIO OFFERTE SU TELEGRAM ---
-def send_deals():
-    deals = get_deals()
-
-    if not deals:
-        print("Nessuna offerta trovata al momento.")
+# Comando per inviare un’offerta (per te)
+@bot.message_handler(commands=['send'])
+def send_offer(message):
+    if message.chat.id != message.from_user.id:
         return
 
-    for d in deals:
-        msg = (
-            f"🔥 *{d['title']}*\n"
-            f"💰 Prezzo: *{d['price_new']}€* (da {d['price_old']}€)\n"
-            f"📉 Sconto: *{d['discount']}%*\n"
-            f"👉 {d['url']}"
-        )
+    text = message.text.replace("/send ", "")
 
-        bot.send_message(CHANNEL_ID, msg, parse_mode="Markdown")
-        time.sleep(3)  # evita flood
-    print("Offerte inviate.")
+    if text.strip() == "":
+        bot.reply_to(message, "❗ Usa il comando così:\n/send Testo dell'offerta")
+        return
 
-# --- LOOP PRINCIPALE ---
-print("Bot avviato! In attesa…")
+    bot.send_message(CHANNEL, f"🔥 NUOVA OFFERTA ({PERCENTUALE}%) 🔥\n\n{text}")
+    bot.reply_to(message, "✅ Offerta inviata nel canale!")
 
-while True:
-    send_deals()
-    time.sleep(SCRAPE_INTERVAL)
+# Loop infinito del bot
+def run():
+    print("Bot avviato...")
+    while True:
+        try:
+            bot.polling(none_stop=True)
+        except Exception as e:
+            print("Errore polling:", e)
+            time.sleep(3)
+
+if __name__ == "__main__":
+    run()
